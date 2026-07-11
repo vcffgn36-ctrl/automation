@@ -106,3 +106,50 @@ Stage Summary:
 - Proxy configurable per profile (HTTP/SOCKS5) — Tor pluggable externally
 - Responsive design, emerald accent color (no indigo/blue), sticky footer
 - To run: cd /home/z/my-project && bun run dev (Next.js) + cd mini-services/automation-service && bun run dev (mini-service)
+
+---
+Task ID: 10
+Agent: main
+Task: Push project to GitHub and create full documentation (README + update script)
+
+Work Log:
+- Created comprehensive README.md (Arabic + English) with:
+  - Architecture diagram (ASCII)
+  - Prerequisites table
+  - Step-by-step clone & run guide
+  - Development mode instructions
+  - Usage guide (creating profiles, finding CSS selectors, running)
+  - All 11 task types reference table
+  - Proxy & Tor setup instructions
+  - Update workflow (how to pull updates from GitHub)
+  - Troubleshooting section (6 common errors + solutions)
+  - Security notes
+  - Project structure tree
+- Created .env.example with relative DATABASE_URL (file:./db/custom.db) — fixes the "Error code 14" issue users hit when cloning
+- Created update.sh — one-command update script that:
+  - Backs up database before updating
+  - Stashes local changes
+  - Pulls from origin/main
+  - Reinstalls dependencies
+  - Updates Prisma schema (preserves data)
+  - Updates Playwright Firefox
+  - Restores stashed changes
+- Updated .gitignore to:
+  - Ignore db/*.db and db/*.db-journal
+  - Ignore mini-services/automation-service/node_modules/
+  - Ignore *.log, /tmp/, IDE files
+  - Allow .env.example (via !.env.example exception)
+- Untracked db/custom.db and .env from git (were committed by previous agent — security risk since db contains user passwords)
+- Committed all changes with detailed message
+- Added GitHub remote and pushed to https://github.com/vcffgn36-ctrl/automation
+- Verified push: README.md, update.sh, .env.example all accessible (HTTP 200); db/custom.db correctly NOT pushed (HTTP 404)
+- Removed GitHub token from git remote URL after push (security)
+
+Stage Summary:
+- Repository: https://github.com/vcffgn36-ctrl/automation
+- 5 commits pushed (Initial → scaffold → automation framework → env fix → docs)
+- All source code, README, .env.example, update.sh are on GitHub
+- Database file and .env are NOT on GitHub (gitignored + untracked)
+- User can now: git clone → bun install → cp .env.example .env → bun run db:push → bunx playwright install firefox → run both services
+- User can update via: ./update.sh (or manual git pull + bun install + db:push)
+- SECURITY: User shared GitHub PAT in chat — must revoke it immediately from GitHub settings
