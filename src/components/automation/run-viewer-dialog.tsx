@@ -324,13 +324,125 @@ export function RunViewerDialog({
 
                 {extracts.length > 0 && (
                   <div className="space-y-2 pt-2">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Extracted text</div>
-                    {extracts.map((e, i) => (
-                      <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
-                        <div className="text-[10px] text-muted-foreground font-mono mb-1">#{e.order}</div>
-                        <pre className="whitespace-pre-wrap break-words font-mono text-foreground/90">{e.text}</pre>
-                      </div>
-                    ))}
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Extracted data ({extracts.length})
+                    </div>
+                    {extracts.map((e, i) => {
+                      // Render based on extract type.
+                      const etype = e.type || 'text'
+
+                      // --- TEXT (default, backward compatible) ---
+                      if (etype === 'text') {
+                        return (
+                          <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
+                            <div className="text-[10px] text-muted-foreground font-mono mb-1">#{e.order} · text</div>
+                            <pre className="whitespace-pre-wrap break-words font-mono text-foreground/90">{e.text}</pre>
+                          </div>
+                        )
+                      }
+
+                      // --- LIST (extract_all: email subjects, table rows, etc.) ---
+                      if (etype === 'list') {
+                        const items = e.items || []
+                        return (
+                          <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
+                            <div className="text-[10px] text-muted-foreground font-mono mb-1.5 flex items-center justify-between">
+                              <span>#{e.order} · list</span>
+                              <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{items.length} items</span>
+                            </div>
+                            {items.length === 0 ? (
+                              <p className="text-muted-foreground italic">No items found.</p>
+                            ) : (
+                              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+                                {items.map((item, idx) => (
+                                  <div key={idx} className="flex gap-2 items-start rounded border-l-2 border-emerald-400 bg-background/60 px-2 py-1.5">
+                                    <span className="text-[10px] text-muted-foreground font-mono shrink-0 mt-0.5 tabular-nums">{idx + 1}.</span>
+                                    <span className="break-words text-foreground/90">{item.substring(0, 500)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      // --- LINKS (extract_links: activation links, etc.) ---
+                      if (etype === 'links') {
+                        const links = e.links || []
+                        return (
+                          <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
+                            <div className="text-[10px] text-muted-foreground font-mono mb-1.5 flex items-center justify-between">
+                              <span>#{e.order} · links</span>
+                              <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{links.length} links</span>
+                            </div>
+                            {links.length === 0 ? (
+                              <p className="text-muted-foreground italic">No links found.</p>
+                            ) : (
+                              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+                                {links.map((link, idx) => (
+                                  <a
+                                    key={idx}
+                                    href={link.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex flex-col gap-0.5 rounded border-l-2 border-sky-400 bg-background/60 px-2 py-1.5 hover:bg-emerald-50 transition-colors"
+                                  >
+                                    <span className="text-foreground/90 font-medium break-words">
+                                      {link.text || '(no text)'}
+                                    </span>
+                                    <span className="text-[10px] text-sky-600 font-mono break-all">{link.href}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      // --- MATCHES (extract_regex: activation codes, etc.) ---
+                      if (etype === 'matches') {
+                        const matches = e.matches || []
+                        const contexts = e.contexts || []
+                        return (
+                          <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
+                            <div className="text-[10px] text-muted-foreground font-mono mb-1.5 flex items-center justify-between">
+                              <span>#{e.order} · regex matches</span>
+                              <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{matches.length} found</span>
+                            </div>
+                            <div className="mb-2 text-[10px] text-muted-foreground font-mono">
+                              pattern: <code className="text-amber-600">{e.pattern}</code>
+                            </div>
+                            {matches.length === 0 ? (
+                              <p className="text-muted-foreground italic">No matches found.</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {matches.map((m, idx) => (
+                                  <div key={idx} className="rounded border-l-2 border-amber-400 bg-background/60 px-2 py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">{idx + 1}.</span>
+                                      <code className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{m}</code>
+                                    </div>
+                                    {contexts[idx]?.context && (
+                                      <div className="mt-1 text-[10px] text-muted-foreground italic break-words pl-5">
+                                        …{contexts[idx].context}…
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      // Fallback (shouldn't happen)
+                      return (
+                        <div key={i} className="rounded-md border bg-muted/40 p-2 text-xs">
+                          <div className="text-[10px] text-muted-foreground font-mono mb-1">#{e.order}</div>
+                          <pre className="whitespace-pre-wrap break-words font-mono text-foreground/90">{e.text || JSON.stringify(e, null, 2)}</pre>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

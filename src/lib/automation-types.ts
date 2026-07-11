@@ -12,6 +12,9 @@ export type TaskType =
   | 'wait_for_selector'
   | 'screenshot'
   | 'extract'
+  | 'extract_all'
+  | 'extract_links'
+  | 'extract_regex'
   | 'scroll'
   | 'select'
   | 'evaluate'
@@ -25,6 +28,9 @@ export const TASK_TYPES: TaskType[] = [
   'wait_for_selector',
   'screenshot',
   'extract',
+  'extract_all',
+  'extract_links',
+  'extract_regex',
   'scroll',
   'select',
   'evaluate',
@@ -39,6 +45,9 @@ export const TASK_TYPE_DESCRIPTIONS: Record<TaskType, string> = {
   wait_for_selector: 'Wait for an element to appear',
   screenshot: 'Capture a full-page screenshot',
   extract: 'Read text from an element',
+  extract_all: 'Read text from ALL matching elements (e.g. email list)',
+  extract_links: 'Extract all links (URLs) from page or element',
+  extract_regex: 'Extract text matching a regex pattern (e.g. activation codes)',
   scroll: 'Scroll the page down by N px',
   select: 'Choose an <option> in a <select>',
   evaluate: 'Run arbitrary JS in the page',
@@ -53,6 +62,9 @@ export const TASK_TYPE_NEEDS_SELECTOR: Record<TaskType, boolean> = {
   wait_for_selector: true,
   screenshot: false,
   extract: true,
+  extract_all: true,
+  extract_links: false,
+  extract_regex: false,
   scroll: false,
   select: true,
   evaluate: false,
@@ -67,6 +79,9 @@ export const TASK_TYPE_NEEDS_VALUE: Record<TaskType, boolean> = {
   wait_for_selector: false,
   screenshot: false,
   extract: false,
+  extract_all: false,
+  extract_links: false,
+  extract_regex: true,
   scroll: true,
   select: true,
   evaluate: true,
@@ -169,7 +184,20 @@ export interface ScreenshotEntry {
 
 export interface ExtractEntry {
   order: number
-  text: string
+  /** Plain text extract (backward compatible — used by `extract` task). */
+  text?: string
+  /** Type of structured extract. Defaults to 'text' for backward compatibility. */
+  type?: 'text' | 'list' | 'links' | 'matches'
+  /** For type='list': array of text items (e.g. email subjects). */
+  items?: string[]
+  /** For type='links': array of link objects. */
+  links?: Array<{ text: string; href: string }>
+  /** For type='matches': regex pattern used. */
+  pattern?: string
+  /** For type='matches': array of matched strings. */
+  matches?: string[]
+  /** For type='matches': optional context — the text around each match. */
+  contexts?: Array<{ match: string; context: string }>
 }
 
 export interface ProfileInput {

@@ -51,6 +51,9 @@ const TASK_LABELS: Record<TaskType, string> = {
   wait_for_selector: 'Wait for selector',
   screenshot: 'Screenshot',
   extract: 'Extract text',
+  extract_all: 'Extract all (list)',
+  extract_links: 'Extract links',
+  extract_regex: 'Extract regex (codes)',
   scroll: 'Scroll (px)',
   select: 'Select option',
   evaluate: 'Evaluate JS',
@@ -163,7 +166,9 @@ function SortableRow({
                       ? 'Enter'
                       : task.type === 'evaluate'
                         ? '() => document.title'
-                        : ''
+                        : task.type === 'extract_regex'
+                          ? '\\d{4,8} (activation codes)'
+                          : ''
                 }
                 className="h-9 font-mono text-xs"
               />

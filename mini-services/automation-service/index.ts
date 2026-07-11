@@ -35,7 +35,13 @@ interface ScreenshotEntry {
 
 interface ExtractEntry {
   order: number
-  text: string
+  text?: string
+  type?: 'text' | 'list' | 'links' | 'matches'
+  items?: string[]
+  links?: Array<{ text: string; href: string }>
+  pattern?: string
+  matches?: string[]
+  contexts?: Array<{ match: string; context: string }>
 }
 
 type TaskType =
@@ -47,6 +53,9 @@ type TaskType =
   | 'wait_for_selector'
   | 'screenshot'
   | 'extract'
+  | 'extract_all'
+  | 'extract_links'
+  | 'extract_regex'
   | 'scroll'
   | 'select'
   | 'evaluate'
@@ -240,10 +249,10 @@ function emitScreenshot(runId: string, order: number, dataUrl: string) {
   io.to(`run:${runId}`).emit('screenshot', { runId, ...entry })
 }
 
-function emitExtract(runId: string, order: number, text: string) {
-  const entry: ExtractEntry = { order, text }
-  getBuffer(runId).extracts.push(entry)
-  io.to(`run:${runId}`).emit('extract', { runId, ...entry })
+function emitExtract(runId: string, order: number, entry: Omit<ExtractEntry, 'order'>) {
+  const fullEntry: ExtractEntry = { order, ...entry }
+  getBuffer(runId).extracts.push(fullEntry)
+  io.to(`run:${runId}`).emit('extract', { runId, ...fullEntry })
 }
 
 function emitStatus(
@@ -663,7 +672,71 @@ async function executeTask(
       const text = await page
         .$eval(selector, (el) => (el as HTMLElement).textContent || '')
         .catch(() => '')
-      emitExtract(runId, order, text)
+      emitExtract(runId, order, { text, type: 'text' })
+      break
+    }
+    case 'extract_all': {
+      // Extract text from ALL elements matching the selector.
+      // Used for reading email lists, table rows, etc.
+      const items = await page
+        .$$eval(selector, (els) =>
+          els.map((el) => ((el as HTMLElement).textContent || '').trim()).filter(Boolean),
+        )
+        .catch(() => [])
+      emitExtract(runId, order, { type: 'list', items })
+      break
+    }
+    case 'extract_links': {
+      // Extract all links (<a href="...">) from the page or from within
+      // the element matching the selector.
+      const scope = selector || 'body'
+      const links = await page
+        .$$eval(
+          `${scope} a[href]`,
+          (els) =>
+            els.map((el) => ({
+              text: ((el as HTMLElement).textContent || '').trim().substring(0, 200),
+              href: (el as HTMLAnchorElement).href,
+            })),
+        )
+        .catch(() => [])
+      emitExtract(runId, order, { type: 'links', links })
+      break
+    }
+    case 'extract_regex': {
+      // Extract all text matches for a regex pattern from the page or
+      // from within the element matching the selector.
+      // `value` = the regex pattern (e.g. "\\d{4,8}" for 4-8 digit codes).
+      const scope = selector || 'body'
+      const fullText = await page
+        .$eval(scope, (el) => (el as HTMLElement).textContent || '')
+        .catch(() => '')
+      let matches: string[] = []
+      let contexts: Array<{ match: string; context: string }> = []
+      try {
+        const regex = new RegExp(value, 'gi')
+        const found = fullText.match(regex) || []
+        // Deduplicate while preserving order.
+        matches = [...new Set(found)]
+        // Build context for each match (50 chars on each side).
+        contexts = []
+        for (const m of matches) {
+          const idx = fullText.indexOf(m)
+          if (idx >= 0) {
+            const start = Math.max(0, idx - 50)
+            const end = Math.min(fullText.length, idx + m.length + 50)
+            contexts.push({
+              match: m,
+              context: fullText.substring(start, end).trim(),
+            })
+          }
+        }
+      } catch (err) {
+        throw new Error(
+          `Invalid regex "${value}": ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
+      emitExtract(runId, order, { type: 'matches', pattern: value, matches, contexts })
       break
     }
     case 'scroll': {
