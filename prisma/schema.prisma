@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Prisma schema for the browser-automation framework.
+// Generic by design: one Profile = one website's automation recipe (login + tasks).
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +10,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+/// An automation recipe for a single website (login form + post-login tasks).
+model Profile {
+  id               String   @id @default(cuid())
+  name             String
+  siteUrl          String
+  loginUrl         String
+  // CSS selectors describing the login form on loginUrl.
+  usernameSelector String   @default("input[type='email']")
+  passwordSelector String   @default("input[type='password']")
+  submitSelector   String   @default("button[type='submit']")
+  // Credentials (local-only sandbox — stored in plain SQLite).
+  username         String
+  password         String
+  // Browser launch options.
+  headless         Boolean  @default(true)
+  viewportWidth    Int      @default(1280)
+  viewportHeight   Int      @default(800)
+  userAgent        String?
+  locale           String?
+  // Proxy configuration (optional). If useProxy=false these are ignored.
+  useProxy         Boolean  @default(false)
+  proxyServer      String?
+  proxyUsername    String?
+  proxyPassword    String?
+  // Persisted browser session (cookies + storage) after a successful login,
+  // reused on subsequent runs to skip re-login.
+  sessionState     String?
+  sessionUpdatedAt DateTime?
+
+  tasks Task[]
+  runs  Run[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+/// A single step in the automation pipeline (executed in `order` after login).
+model Task {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  order       Int      @default(0)
+  /// One of: navigate | click | fill | press | wait | wait_for_selector |
+  /// screenshot | extract | scroll | select | evaluate
+  type        String
+  /// CSS selector (used by click/fill/press/wait_for_selector/screenshot/extract/select).
+  selector    String?
+  /// Value: URL (navigate), text (fill), key (press), pixels (scroll), code (evaluate), option (select).
+  value       String?
+  /// Human-readable note shown in the UI.
+  description String?
+  /// Optional pause (ms) after this step finishes.
+  waitMs      Int      @default(0)
+  /// Timeout (ms) for this step. 0 means use engine default.
+  timeoutMs   Int      @default(30000)
+
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
+
+/// One execution of a profile.
+model Run {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  /// pending | running | success | failed
+  status      String   @default("pending")
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  /// JSON array of { ts, level, message } log lines.
+  logs        String   @default("[]")
+  /// JSON array of { step, order, dataUrl } screenshot data URLs.
+  screenshots String   @default("[]")
+  /// JSON array of { step, order, text } extracted text from `extract` tasks.
+  extracts    String   @default("[]")
+  /// Error message if status=failed.
+  error       String?
+
+  createdAt DateTime @default(now())
 }

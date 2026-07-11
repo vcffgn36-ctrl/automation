@@ -7,7 +7,8 @@ const globalForPrisma = globalThis as unknown as {
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ['query'],
+    // Keep logging quiet to save memory in the sandbox.
+    log: [],
   })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
