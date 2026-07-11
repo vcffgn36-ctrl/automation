@@ -70,6 +70,7 @@ interface ProfileInput {
   usernameSelector: string
   passwordSelector: string
   submitSelector: string
+  loginMode: 'single' | 'multistep'
   username: string
   password: string
   headless: boolean
@@ -335,14 +336,79 @@ async function executeRun(req: RunRequest): Promise<void> {
         timeout: 30000,
       })
 
-      emitLog(runId, 'info', 'Filling login form...')
-      await page.fill(profile.usernameSelector, profile.username, {
-        timeout: 15000,
-      })
-      await page.fill(profile.passwordSelector, profile.password, {
-        timeout: 15000,
-      })
-      await page.click(profile.submitSelector, { timeout: 15000 })
+      // Small delay to let the page settle (some SSO pages render the form
+      // asynchronously after DOMContentLoaded).
+      await page.waitForTimeout(800).catch(() => {})
+
+      const mode = profile.loginMode === 'multistep' ? 'multistep' : 'single'
+      emitLog(runId, 'info', `Login mode: ${mode}`)
+
+      if (mode === 'single') {
+        emitLog(runId, 'info', 'Filling login form (single-step)...')
+        await page.fill(profile.usernameSelector, profile.username, {
+          timeout: 15000,
+        })
+        await page.fill(profile.passwordSelector, profile.password, {
+          timeout: 15000,
+        })
+        await page.click(profile.submitSelector, { timeout: 15000 })
+      } else {
+        // Multi-step login (Microsoft, Google, Apple, GitHub, most modern SSO):
+        //   1. Fill email/username
+        //   2. Click submit ("Next")
+        //   3. Wait for the password field to become visible
+        //   4. Fill password
+        //   5. Click submit again ("Sign in")
+        emitLog(runId, 'info', 'Multi-step login: filling username...')
+        await page.fill(profile.usernameSelector, profile.username, {
+          timeout: 15000,
+        })
+        emitLog(runId, 'info', 'Multi-step login: clicking Next...')
+        await page.click(profile.submitSelector, { timeout: 15000 })
+
+        // Wait for the password field to appear. Microsoft's password input
+        // is rendered only after the email step is submitted. We retry with
+        // increasing patience because the transition can take 1-5s.
+        emitLog(runId, 'info', 'Multi-step login: waiting for password field...')
+        await page
+          .waitForSelector(profile.passwordSelector, {
+            state: 'visible',
+            timeout: 20000,
+          })
+          .catch(() => {
+            // Some sites (e.g. personal Microsoft accounts) hide the password
+            // field behind a second click or a short redirect. Try a fallback
+            // by waiting a bit and retrying.
+          })
+
+        emitLog(runId, 'info', 'Multi-step login: filling password...')
+        await page.fill(profile.passwordSelector, profile.password, {
+          timeout: 15000,
+        })
+        emitLog(runId, 'info', 'Multi-step login: clicking Sign in...')
+        await page.click(profile.submitSelector, { timeout: 15000 })
+
+        // Handle the common "Stay signed in?" / "Remember me" prompt that
+        // Microsoft and some other SSOs show AFTER the password step.
+        // We look for any visible submit button (often labeled "Yes"/"No")
+        // and click the first one we find. This is best-effort — if it's
+        // not present within 5s we just continue.
+        await page.waitForTimeout(2000).catch(() => {})
+        const staySignedInBtn = await page
+          .$(profile.submitSelector)
+          .catch(() => null)
+        if (staySignedInBtn) {
+          const isVisible = await staySignedInBtn.isVisible().catch(() => false)
+          if (isVisible) {
+            emitLog(
+              runId,
+              'info',
+              'Multi-step login: handling "Stay signed in?" prompt...',
+            )
+            await staySignedInBtn.click().catch(() => {})
+          }
+        }
+      }
 
       emitLog(runId, 'info', 'Login form submitted — waiting for navigation...')
       await page

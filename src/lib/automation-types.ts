@@ -86,6 +86,15 @@ export const TASK_USES_VALUE: Set<TaskType> = new Set(
   ),
 )
 
+export type LoginMode = 'single' | 'multistep'
+
+export const LOGIN_MODES: LoginMode[] = ['single', 'multistep']
+
+export const LOGIN_MODE_LABELS: Record<LoginMode, string> = {
+  single: 'Single page (email + password + submit together)',
+  multistep: 'Multi-step (email → Next → password → Sign in)',
+}
+
 export interface Task {
   id: string
   profileId: string
@@ -107,6 +116,7 @@ export interface Profile {
   usernameSelector: string
   passwordSelector: string
   submitSelector: string
+  loginMode: LoginMode
   username: string
   password: string
   headless: boolean
@@ -169,6 +179,7 @@ export interface ProfileInput {
   usernameSelector: string
   passwordSelector: string
   submitSelector: string
+  loginMode: LoginMode
   username: string
   password: string
   headless: boolean

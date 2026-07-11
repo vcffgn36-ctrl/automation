@@ -27,7 +27,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { TaskBuilder } from './task-builder'
 import { useCreateProfile, useUpdateProfile } from '@/hooks/use-automation'
-import type { Profile, ProfileInput, TaskInput } from '@/lib/automation-types'
+import type { Profile, ProfileInput, TaskInput, LoginMode } from '@/lib/automation-types'
+import { LOGIN_MODES, LOGIN_MODE_LABELS } from '@/lib/automation-types'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -36,6 +37,7 @@ const schema = z.object({
   usernameSelector: z.string().min(1, 'Required'),
   passwordSelector: z.string().min(1, 'Required'),
   submitSelector: z.string().min(1, 'Required'),
+  loginMode: z.enum(['single', 'multistep']),
   username: z.string().min(1, 'Required'),
   password: z.string().min(1, 'Required'),
   headless: z.boolean(),
@@ -65,6 +67,7 @@ const DEFAULTS: FormValues = {
   usernameSelector: "input[type='email']",
   passwordSelector: "input[type='password']",
   submitSelector: "button[type='submit']",
+  loginMode: 'single',
   username: '',
   password: '',
   headless: true,
@@ -86,6 +89,7 @@ function fromProfile(p: Profile): FormValues {
     usernameSelector: p.usernameSelector,
     passwordSelector: p.passwordSelector,
     submitSelector: p.submitSelector,
+    loginMode: p.loginMode,
     username: p.username,
     password: p.password,
     headless: p.headless,
@@ -208,6 +212,33 @@ function ProfileForm({
             </span>
           </div>
         </div>
+
+        {/* Login mode */}
+        <div className="space-y-1.5">
+          <Label htmlFor="loginMode">Login flow mode</Label>
+          <Controller
+            control={control}
+            name="loginMode"
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={(v) => field.onChange(v as LoginMode)}>
+                <SelectTrigger id="loginMode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LOGIN_MODES.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {LOGIN_MODE_LABELS[m]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          <p className="text-xs text-muted-foreground">
+            Use <span className="font-mono">multi-step</span> for Microsoft, Google, Apple, GitHub and most modern SSO pages where the password field only appears after submitting the email.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="usernameSelector">Username selector</Label>

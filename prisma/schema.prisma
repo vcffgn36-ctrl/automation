@@ -20,6 +20,11 @@ model Profile {
   usernameSelector String   @default("input[type='email']")
   passwordSelector String   @default("input[type='password']")
   submitSelector   String   @default("button[type='submit']")
+  // Login flow mode:
+  //   "single"    — one page with email+password+submit all visible (default).
+  //   "multistep" — email first, click submit, THEN password appears, click submit again.
+  //                 Use this for Microsoft, Google, Apple, GitHub, and most modern SSO pages.
+  loginMode        String   @default("single")
   // Credentials (local-only sandbox — stored in plain SQLite).
   username         String
   password         String

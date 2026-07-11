@@ -32,6 +32,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
         usernameSelector: profile.usernameSelector,
         passwordSelector: profile.passwordSelector,
         submitSelector: profile.submitSelector,
+        loginMode: profile.loginMode,
         username: profile.username,
         password: profile.password,
         headless: profile.headless,

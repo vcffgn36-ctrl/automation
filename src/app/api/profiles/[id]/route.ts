@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import type { ProfileInput, TaskInput, Profile, Task, TaskType } from '@/lib/automation-types'
+import type { ProfileInput, TaskInput, Profile, Task, TaskType, LoginMode } from '@/lib/automation-types'
 import { TASK_TYPES, TASK_TYPE_NEEDS_SELECTOR, TASK_TYPE_NEEDS_VALUE } from '@/lib/automation-types'
 
 function validateProfileInput(body: unknown): { ok: true; data: ProfileInput } | { ok: false; error: string } {
@@ -42,6 +42,7 @@ function validateProfileInput(body: unknown): { ok: true; data: ProfileInput } |
     viewportHeight: Number(b.viewportHeight) || 800,
     userAgent: typeof b.userAgent === 'string' && b.userAgent ? b.userAgent : null,
     locale: typeof b.locale === 'string' && b.locale ? b.locale : null,
+    loginMode: (b.loginMode === 'multistep' ? 'multistep' : 'single') as LoginMode,
     useProxy: b.useProxy === true,
     proxyServer: typeof b.proxyServer === 'string' && b.proxyServer ? b.proxyServer : null,
     proxyUsername: typeof b.proxyUsername === 'string' && b.proxyUsername ? b.proxyUsername : null,
@@ -66,6 +67,7 @@ function serializeProfile(p: {
   usernameSelector: string
   passwordSelector: string
   submitSelector: string
+  loginMode: string
   username: string
   password: string
   headless: boolean
@@ -102,6 +104,7 @@ function serializeProfile(p: {
     usernameSelector: p.usernameSelector,
     passwordSelector: p.passwordSelector,
     submitSelector: p.submitSelector,
+    loginMode: (p.loginMode === 'multistep' ? 'multistep' : 'single') as LoginMode,
     username: p.username,
     password: p.password,
     headless: p.headless,
@@ -172,6 +175,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
           usernameSelector: data.usernameSelector,
           passwordSelector: data.passwordSelector,
           submitSelector: data.submitSelector,
+          loginMode: data.loginMode,
           username: data.username,
           password: data.password,
           headless: data.headless,
