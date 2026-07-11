@@ -328,17 +328,20 @@ bun run db:reset
 
 #### Microsoft 365 / Business (login.microsoftonline.com)
 
-نفس إعدادات Outlook.com تقريباً، لكن الـ URL مختلف:
+> **مهم**: لما بتسجل دخول بحساب شخصي (outlook.com) على login.microsoftonline.com، Microsoft بتعمل redirect تلقائياً لـ login.live.com. الـ engine الجديد ذكي بما يكشف الـ selectors الصحيحة في الحالتين تلقائياً.
 
 | الحقل | القيمة |
 |---|---|
 | Login URL | `https://login.microsoftonline.com/` |
 | Login flow mode | `Multi-step` |
-| Username selector | `input[name='loginfmt']` أو `input#i0116` |
-| Password selector | `input[name='passwd']` أو `input#i0118` |
-| Submit button selector | `input[type='submit']` أو `#idSIButton9` |
+| Username selector | `input#i0116` |
+| Password selector | `input#passwordEntry` |
+| Submit button selector | `button[type="submit"]` |
 
-> ملاحظة: لو الـ selector `input[name='loginfmt']` ما اشتغلش، جرّب `input#usernameEntry` (Microsoft بتستخدم selectors مختلفة لـ consumer vs business accounts).
+> **لا تستخدم OAuth URLs الطويلة!** استخدم بس `https://login.microsoftonline.com/` — لو حطيت URL طويل فيه `state` و `client_id`، الـ state بيخلص بسرعة والـ run هيفشل.
+>
+> تم اختبار هذه الإعدادات فعلياً وشغالة 100% مع حساب outlook.com شخصي.
+> الـ engine بيستخدم "smart selectors" — لو الـ selector اللي حددته ما وجدش عنصر، بيجرّب fallbacks تلقائياً (`#idSIButton9`, `input#usernameEntry`, إلخ).
 
 ### تشغيل البروفايل
 
