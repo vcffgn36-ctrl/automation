@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, Plus, Trash2, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,6 +35,7 @@ import {
   type TaskInput,
   type TaskType,
 } from '@/lib/automation-types'
+import { TASK_PRESETS } from '@/lib/templates'
 import { cn } from '@/lib/utils'
 
 interface TaskBuilderProps {
@@ -273,10 +274,41 @@ export function TaskBuilder({ value, onChange }: TaskBuilderProps) {
         </SortableContext>
       </DndContext>
 
-      <Button type="button" variant="outline" size="sm" onClick={add}>
-        <Plus className="h-4 w-4 mr-1" />
-        Add task
-      </Button>
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <Plus className="h-4 w-4 mr-1" />
+          Add task
+        </Button>
+
+        {/* Quick-add task presets */}
+        <div className="flex items-center gap-1.5">
+          <Zap className="h-3.5 w-3.5 text-amber-500" />
+          <Select
+            value="__none"
+            onValueChange={(id) => {
+              const preset = TASK_PRESETS.find((p) => p.id === id)
+              if (preset) {
+                // Append the preset's tasks to the current list.
+                onChange([...value, ...preset.tasks])
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-auto min-w-[220px] text-xs">
+              <SelectValue placeholder="Quick add task preset…" />
+            </SelectTrigger>
+            <SelectContent>
+              {TASK_PRESETS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-xs">{p.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{p.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
   )
 }

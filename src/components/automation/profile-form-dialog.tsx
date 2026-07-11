@@ -29,6 +29,8 @@ import { TaskBuilder } from './task-builder'
 import { useCreateProfile, useUpdateProfile } from '@/hooks/use-automation'
 import type { Profile, ProfileInput, TaskInput, LoginMode } from '@/lib/automation-types'
 import { LOGIN_MODES, LOGIN_MODE_LABELS } from '@/lib/automation-types'
+import { PROFILE_TEMPLATES, type ProfileTemplate } from '@/lib/templates'
+import { Wand2 } from 'lucide-react'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -147,6 +149,7 @@ function ProfileForm({
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -154,6 +157,23 @@ function ProfileForm({
   })
 
   const useProxy = useWatch({ control, name: 'useProxy' })
+
+  // Apply a profile template: fill in all the fields the template provides.
+  // Only shown when creating a new profile (not when editing an existing one).
+  function applyTemplate(tpl: ProfileTemplate) {
+    if (!tpl.values) return
+    if (tpl.values.name !== undefined) setValue('name', tpl.values.name)
+    if (tpl.values.siteUrl !== undefined) setValue('siteUrl', tpl.values.siteUrl)
+    if (tpl.values.loginUrl !== undefined) setValue('loginUrl', tpl.values.loginUrl)
+    if (tpl.values.usernameSelector !== undefined) setValue('usernameSelector', tpl.values.usernameSelector)
+    if (tpl.values.passwordSelector !== undefined) setValue('passwordSelector', tpl.values.passwordSelector)
+    if (tpl.values.submitSelector !== undefined) setValue('submitSelector', tpl.values.submitSelector)
+    if (tpl.values.loginMode !== undefined) setValue('loginMode', tpl.values.loginMode as LoginMode)
+    if (tpl.values.headless !== undefined) setValue('headless', tpl.values.headless)
+    if (tpl.values.viewportWidth !== undefined) setValue('viewportWidth', tpl.values.viewportWidth)
+    if (tpl.values.viewportHeight !== undefined) setValue('viewportHeight', tpl.values.viewportHeight)
+    if (tpl.values.useProxy !== undefined) setValue('useProxy', tpl.values.useProxy)
+  }
 
   async function onSubmit(values: FormValues) {
     const payload: ProfileInput = {
@@ -177,6 +197,41 @@ function ProfileForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pt-2">
+      {/* Quick-start template selector — only when creating a new profile */}
+      {!isEdit && (
+        <section className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-emerald-600" />
+            <SectionTitle>Quick start — pick a template</SectionTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Choose a website template to auto-fill the login URL, selectors, and login mode.
+            You can still edit any field below after applying.
+          </p>
+          <Select
+            value="__none"
+            onValueChange={(id) => {
+              const tpl = PROFILE_TEMPLATES.find((t) => t.id === id)
+              if (tpl) applyTemplate(tpl)
+            }}
+          >
+            <SelectTrigger className="bg-background">
+              <SelectValue placeholder="Select a template…" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROFILE_TEMPLATES.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{t.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{t.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </section>
+      )}
+
       {/* Site */}
       <section className="space-y-3">
         <SectionTitle>Site</SectionTitle>
