@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -52,3 +53,20 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Database (SQLite — local only, never commit credentials stored in it)
+/db/*.db
+/db/*.db-journal
+
+# Automation mini-service local artifacts
+/mini-services/automation-service/node_modules/
+
+# Watchdog / local runtime logs
+/tmp/
+*.log
+
+# OS / editor
+Thumbs.db
+.idea/
+.vscode/
+*.swp
