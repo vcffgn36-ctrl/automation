@@ -309,6 +309,37 @@ bun run db:reset
 | Password | `input[type='password']` |
 | Submit | `button[type='submit']` أو `button.login-btn` أو `#login-button` |
 
+### Selectors جاهزة لمواقع شائعة
+
+#### Microsoft / Outlook.com (login.live.com)
+
+> **مهم**: Microsoft بتستخدم **multi-step login** — الإيميل الأول، وبعدين الباسورد بيظهر في صفحة تانية. لازم تختار **Login flow mode: Multi-step**.
+
+| الحقل | القيمة |
+|---|---|
+| Login URL | `https://login.live.com/` |
+| Login flow mode | `Multi-step (email → Next → password → Sign in)` |
+| Username selector | `input#usernameEntry` |
+| Password selector | `input#passwordEntry` |
+| Submit button selector | `button[type="submit"]` |
+
+> تم اختبار هذه الإعدادات فعلياً وشغالة 100% — تسجيل دخول ناجح + screenshot للـ inbox.
+> ملاحظة: Microsoft قد تغيّر الـ selectors مستقبلاً. لو فشل الـ login، استخدم سكريبت الفحص في قسم استكشاف الأخطاء.
+
+#### Microsoft 365 / Business (login.microsoftonline.com)
+
+نفس إعدادات Outlook.com تقريباً، لكن الـ URL مختلف:
+
+| الحقل | القيمة |
+|---|---|
+| Login URL | `https://login.microsoftonline.com/` |
+| Login flow mode | `Multi-step` |
+| Username selector | `input[name='loginfmt']` أو `input#i0116` |
+| Password selector | `input[name='passwd']` أو `input#i0118` |
+| Submit button selector | `input[type='submit']` أو `#idSIButton9` |
+
+> ملاحظة: لو الـ selector `input[name='loginfmt']` ما اشتغلش، جرّب `input#usernameEntry` (Microsoft بتستخدم selectors مختلفة لـ consumer vs business accounts).
+
 ### تشغيل البروفايل
 
 1. اضغط زر **Run** على كارت البروفايل
@@ -575,12 +606,95 @@ sudo apt install -y libgtk-3-0 libasound2 libdbus-glib-1-2 \
 - **CAPTCHA**: بعض المواقع تطلب CAPTCHA يصعب تخطّيه تلقائياً.
 - **2FA**: الأتمتة لا تدعم 2FA تلقائياً (تحتاج تدخل بشري أو إعداد مسبق).
 - **Cloudflare/Anti-bot**: المواقع المحمية بـ Cloudflare قد تكتشف الـ automation.
+- **Login mode غلط**: لو الموقع بيستخدم multi-step login (Microsoft, Google, etc.) لازم تختار "Multi-step" في الـ Profile Editor.
 
 **الحلول**:
 
 - جرّب تشغيل الـ profile بـ `headless: false` لترى المتصفح وهو يعمل.
 - استخدم بروكسي residential (مدفوع) لتجنّب الحظر.
 - للمواقع الصعبة، استخدم `wait` بين الخطوات لإبطاء السرعة.
+
+#### سكريبت فحص الـ selectors (لاكتشاف الـ selectors الصحيحة)
+
+لو الـ selectors اللي في الـ README ما اشتغلتش (مواقع بتغيّر HTML بتاعها)، استخدم السكريبت ده عشان تكتشف الـ selectors الصحيحة بنفسك:
+
+أنشئ ملف `inspect-login.ts` في مجلد `mini-services/automation-service/`:
+
+```typescript
+import { firefox } from 'playwright'
+
+const LOGIN_URL = 'https://login.live.com/'  // ← غيّر ده للـ URL بتاعك
+const USERNAME = 'your@email.com'             // ← غيّر ده
+const USERNAME_SELECTOR = 'input#usernameEntry'  // ← غيّر ده للاختيار الأولي
+
+const browser = await firefox.launch({ headless: true })
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 800 },
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0',
+})
+const page = await context.newPage()
+
+console.log('=== Navigating ===')
+await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 })
+await page.waitForTimeout(2000)
+console.log('URL:', page.url())
+console.log('Title:', await page.title())
+
+// Step 1: inspect email page
+console.log('\n=== INPUT ELEMENTS ===')
+const inputs1 = await page.$$eval('input', els => els.map(el => ({
+  type: el.type, name: el.name || '', id: el.id || '',
+  visible: (el as HTMLElement).offsetParent !== null,
+})).filter(i => i.visible))
+console.log(JSON.stringify(inputs1, null, 2))
+
+console.log('\n=== BUTTONS ===')
+const buttons1 = await page.$$eval('button, input[type="submit"]', els => els.map(el => ({
+  tag: el.tagName.toLowerCase(), type: el.type || '', id: el.id || '',
+  text: (el.textContent || el.value || '').trim().substring(0, 40),
+  visible: (el as HTMLElement).offsetParent !== null,
+})).filter(b => b.visible))
+console.log(JSON.stringify(buttons1, null, 2))
+
+// Step 2: try filling username and clicking Next
+if (USERNAME_SELECTOR) {
+  console.log('\n=== Filling username & clicking Next ===')
+  await page.fill(USERNAME_SELECTOR, USERNAME).catch(e => console.log('fill failed:', e.message))
+  await page.click('button[type="submit"]').catch(e => console.log('click failed:', e.message))
+  await page.waitForTimeout(5000)
+
+  console.log('URL after Next:', page.url())
+  console.log('Title:', await page.title())
+
+  // Inspect password page
+  console.log('\n=== INPUT ELEMENTS (password page) ===')
+  const inputs2 = await page.$$eval('input', els => els.map(el => ({
+    type: el.type, name: el.name || '', id: el.id || '',
+    visible: (el as HTMLElement).offsetParent !== null,
+  })).filter(i => i.visible || i.type === 'password'))
+  console.log(JSON.stringify(inputs2, null, 2))
+
+  console.log('\n=== BUTTONS (password page) ===')
+  const buttons2 = await page.$$eval('button, input[type="submit"]', els => els.map(el => ({
+    tag: el.tagName.toLowerCase(), type: el.type || '', id: el.id || '',
+    text: (el.textContent || el.value || '').trim().substring(0, 40),
+    visible: (el as HTMLElement).offsetParent !== null,
+  })).filter(b => b.visible))
+  console.log(JSON.stringify(buttons2, null, 2))
+}
+
+await browser.close()
+console.log('\n=== DONE ===')
+```
+
+ثم شغّله:
+
+```bash
+cd mini-services/automation-service
+bun inspect-login.ts
+```
+
+هيُظهرلك كل الـ inputs والـ buttons الـ visible في صفحة الـ login (قبل وبعد الضغط على Next). من النتايج دي تقدر تحدد الـ selectors الصحيحة وتحدّث البروفايل بتاعك.
 
 ---
 
