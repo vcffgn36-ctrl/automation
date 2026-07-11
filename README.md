@@ -343,6 +343,100 @@ bun run db:reset
 > تم اختبار هذه الإعدادات فعلياً وشغالة 100% مع حساب outlook.com شخصي.
 > الـ engine بيستخدم "smart selectors" — لو الـ selector اللي حددته ما وجدش عنصر، بيجرّب fallbacks تلقائياً (`#idSIButton9`, `input#usernameEntry`, إلخ).
 
+---
+
+## 📧 قراءة الإيميلات واستخراج الأكواد / الروابط
+
+أهم استخدام للأتمتة هو قراءة الإيميلات الواردة واستخراج منها:
+- **أكواد تفعيل** (OTP, verification codes)
+- **روابط تفعيل** (activation links)
+- **رسائل حديثة لسه متفتحتش**
+
+الـ framework بيوفّر 3 task types جديدة لده:
+
+### الـ Task Types الجديدة
+
+| النوع | الوصف | الـ selector | الـ value |
+|---|---|---|---|
+| `extract_all` | استخراج نص من **كل** العناصر المطابقة | ✅ (CSS selector) | ❌ |
+| `extract_links` | استخراج كل الروابط من الصفحة أو عنصر | اختياري (لتحديد نطاق) | ❌ |
+| `extract_regex` | استخراج نص مطابق لنمط regex | اختياري (لتحديد نطاق) | ✅ (regex pattern) |
+
+### مثال كامل: قراءة inbox واستخراج أكواد وروابط تفعيل
+
+أنشئ بروفايل جديد بالإعدادات دي:
+
+**الـ Profile:**
+| الحقل | القيمة |
+|---|---|
+| Name | Outlook - Read Emails |
+| Login URL | `https://login.live.com/` |
+| Login flow mode | Multi-step |
+| Username selector | `input#usernameEntry` |
+| Password selector | `input#passwordEntry` |
+| Submit button selector | `button[type="submit"]` |
+| Username | إيميلك |
+| Password | باسوردك |
+
+**الـ Tasks (بعد الـ login):**
+
+| # | Type | Selector | Value | Description |
+|---|---|---|---|---|
+| 1 | `wait` | — | `3000` | Wait for inbox to load |
+| 2 | `navigate` | — | `https://outlook.live.com/mail/0/inbox` | Go to inbox |
+| 3 | `wait` | — | `5000` | Wait for emails to render |
+| 4 | `extract_all` | `[role="option"]` | — | Extract all email rows |
+| 5 | `extract_links` | — | — | Extract all links from inbox |
+| 6 | `extract_regex` | — | `\d{4,8}` | Find activation codes (4-8 digits) |
+| 7 | `screenshot` | — | — | Final inbox view |
+
+### إيجاد أكواد تفعيل محددة
+
+لو عايز تلاقي أكواد بpattern معين:
+
+| الـ code بتاع | الـ regex |
+|---|---|
+| 4-8 أرقام (OTP عام) | `\d{4,8}` |
+| 6 أرقام بالظبط (SMS code) | `\d{6}` |
+| alphanumeric code (مثل `ABC123`) | `[A-Z0-9]{6,10}` |
+| كود بين قوسين | `\((\d{4,8})\)` |
+
+### فتح إيميل معين وقراءة محتواه
+
+لو عايز تفتح إيميل معين (مثلاً أحدث واحد) وتقرا محتواه:
+
+| # | Type | Selector | Value | Description |
+|---|---|---|---|---|
+| 1-3 | (نفس الـ login + navigate للـ inbox زي ما فوق) | | | |
+| 4 | `wait_for_selector` | `[role="option"]` | — | Wait for email list |
+| 5 | `click` | `[role="option"]:first-child` | — | Open first email |
+| 6 | `wait` | — | `3000` | Wait for email body to load |
+| 7 | `extract` | `[role="document"]` | — | Extract email body text |
+| 8 | `extract_links` | `[role="document"]` | — | Extract links from email body |
+| 9 | `extract_regex` | `[role="document"]` | `\d{4,8}` | Find codes in email body |
+
+### إيجاد الـ selector الصحيح لصفحة الـ inbox
+
+Outlook بيغيّر الـ HTML بتاعه بشكل متكرر. لو `[role="option"]` ما اشتغلش، استخدم سكريبت الفحص (في قسم استكشاف الأخطاء) عشان تلاقي الـ selector الصحيح. بدائل شائعة:
+
+- `[role="option"]` — الأحدث
+- `[role="listitem"]` — أحياناً
+- `div[data-convid]` — كل إيميل بيه معرف
+- `div[role="listbox"] > div` — العناصر داخل الـ listbox
+
+### كيف تظهر النتائج في الـ Run Viewer
+
+الـ Run Viewer بيعرض كل نوع extract بشكل مختلف:
+
+- **extract (text)**: نص monospace بسيط
+- **extract_all (list)**: قائمة مرقّمة مع badge بعدد العناصر
+- **extract_links (links)**: روابط قابلة للضغط (بتفتح في tab جديد) — كل رابط فيه النص + الـ href
+- **extract_regex (matches)**: كل match بيظهر في chip ملون + 50 حرف من السياق حواليه
+
+---
+
+## المحتويات / Table of Contents
+
 ### تشغيل البروفايل
 
 1. اضغط زر **Run** على كارت البروفايل
@@ -369,7 +463,10 @@ bun run db:reset
 | `wait` | انتظر N ملي ثانية | ❌ | ✅ (ms) |
 | `wait_for_selector` | انتظر ظهور عنصر | ✅ | ❌ |
 | `screenshot` | التقاط صورة كاملة للصفحة | ❌ | ❌ |
-| `extract` | استخراج نص من عنصر | ✅ | ❌ |
+| `extract` | استخراج نص من عنصر واحد | ✅ | ❌ |
+| `extract_all` | استخراج نص من **كل** العناصر المطابقة (قائمة إيميلات) | ✅ | ❌ |
+| `extract_links` | استخراج كل الروابط من الصفحة أو عنصر | اختياري | ❌ |
+| `extract_regex` | استخراج نص مطابق لنمط regex (أكواد تفعيل) | اختياري | ✅ (regex) |
 | `scroll` | تمرير الصفحة لأسفل N بكسل | ❌ | ✅ (px) |
 | `select` | اختيار option في `<select>` | ✅ | ✅ (قيمة option) |
 | `evaluate` | تنفيذ JavaScript في الصفحة | ❌ | ✅ (كود JS) |
