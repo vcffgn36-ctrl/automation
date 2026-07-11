@@ -263,6 +263,124 @@ function emitStatus(
 
 const GLOBAL_RUN_TIMEOUT_MS = 5 * 60 * 1000
 
+/**
+ * Smart fill helper: try the user-provided selector first, then fall back to
+ * common username/password selectors. This handles the Microsoft quirk where
+ * login.microsoftonline.com uses input#i0116 but after redirect to
+ * login.live.com the field becomes input#usernameEntry.
+ */
+async function smartFill(
+  page: import('playwright').Page,
+  primarySelector: string,
+  value: string,
+  fieldKind: 'username' | 'password',
+  timeout = 15000,
+): Promise<void> {
+  const candidates: string[] = [primarySelector]
+  const fallbacks =
+    fieldKind === 'username'
+      ? [
+          'input#i0116',
+          'input#usernameEntry',
+          "input[name='loginfmt']",
+          "input[name='username']",
+          "input[type='email']",
+          'input[name=login]',
+        ]
+      : [
+          'input#passwordEntry',
+          'input#i0118',
+          "input[name='passwd']",
+          "input[name='password']",
+          "input[type='password']",
+        ]
+  for (const f of fallbacks) {
+    if (!candidates.includes(f)) candidates.push(f)
+  }
+
+  let lastErr: unknown = null
+  for (const sel of candidates) {
+    try {
+      await page.fill(sel, value, { timeout: 3000 })
+      return
+    } catch (err) {
+      lastErr = err
+      continue
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`Could not fill ${fieldKind} (tried: ${candidates.join(', ')})`)
+}
+
+/**
+ * Smart click helper: try the user-provided selector first, then fall back to
+ * common submit-button selectors. This handles sites (like Microsoft) that
+ * use different HTML for the "Next" button on page 1 vs the "Sign in" button
+ * on page 2 — e.g. `<input type="submit" id="idSIButton9">` on the email page
+ * but `<button type="submit">` on the password page.
+ *
+ * Order tried:
+ *   1. The exact selector the user provided.
+ *   2. #idSIButton9 (Microsoft enterprise Next button).
+ *   3. button[type="submit"] (modern Microsoft live.com Sign in).
+ *   4. input[type="submit"] (legacy Microsoft Next button).
+ *   5. button:has-text("Next"|"Sign in"|"Continue"|"Yes") as a last resort.
+ */
+async function smartClickSubmit(
+  page: import('playwright').Page,
+  primarySelector: string,
+  timeout = 15000,
+): Promise<void> {
+  // Build a list of candidate selectors in priority order.
+  const candidates: string[] = [primarySelector]
+  // Avoid duplicates if the user already provided one of these.
+  const fallbacks = [
+    '#idSIButton9',
+    'button[type="submit"]',
+    'input[type="submit"]',
+    '#idSIButton8',
+    'button[data-testid="primaryButton"]',
+  ]
+  for (const f of fallbacks) {
+    if (!candidates.includes(f)) candidates.push(f)
+  }
+
+  let lastErr: unknown = null
+  for (const sel of candidates) {
+    try {
+      // Try to click; if the element doesn't exist or isn't visible, the
+      // Playwright click will throw quickly (within ~1s) because the element
+      // isn't attached — much faster than waiting the full `timeout`.
+      await page.click(sel, { timeout: Math.min(timeout, 5000), trial: true })
+      // If we got here, the element is visible and clickable — do the real click.
+      await page.click(sel, { timeout })
+      return
+    } catch (err) {
+      lastErr = err
+      // Try the next candidate.
+      continue
+    }
+  }
+
+  // Last resort: text-based matching for common button labels.
+  const textCandidates = ['Next', 'Sign in', 'Continue', 'Yes', 'Submit', 'Log in', 'Login']
+  for (const txt of textCandidates) {
+    try {
+      await page.click(`button:has-text("${txt}")`, { timeout: 3000, trial: true })
+      await page.click(`button:has-text("${txt}")`, { timeout: 5000 })
+      return
+    } catch {
+      continue
+    }
+  }
+
+  // If everything failed, rethrow the last error.
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`Could not find a submit button (tried: ${candidates.join(', ')})`)
+}
+
 async function executeRun(req: RunRequest): Promise<void> {
   const { runId, callbackUrl, profile, tasks } = req
   emitLog(runId, 'info', `Starting run for profile "${profile.name}"`)
@@ -345,13 +463,9 @@ async function executeRun(req: RunRequest): Promise<void> {
 
       if (mode === 'single') {
         emitLog(runId, 'info', 'Filling login form (single-step)...')
-        await page.fill(profile.usernameSelector, profile.username, {
-          timeout: 15000,
-        })
-        await page.fill(profile.passwordSelector, profile.password, {
-          timeout: 15000,
-        })
-        await page.click(profile.submitSelector, { timeout: 15000 })
+        await smartFill(page, profile.usernameSelector, profile.username, 'username')
+        await smartFill(page, profile.passwordSelector, profile.password, 'password')
+        await smartClickSubmit(page, profile.submitSelector, 15000)
       } else {
         // Multi-step login (Microsoft, Google, Apple, GitHub, most modern SSO):
         //   1. Fill email/username
@@ -360,53 +474,52 @@ async function executeRun(req: RunRequest): Promise<void> {
         //   4. Fill password
         //   5. Click submit again ("Sign in")
         emitLog(runId, 'info', 'Multi-step login: filling username...')
-        await page.fill(profile.usernameSelector, profile.username, {
-          timeout: 15000,
-        })
+        await smartFill(page, profile.usernameSelector, profile.username, 'username')
         emitLog(runId, 'info', 'Multi-step login: clicking Next...')
-        await page.click(profile.submitSelector, { timeout: 15000 })
+        await smartClickSubmit(page, profile.submitSelector, 15000)
 
         // Wait for the password field to appear. Microsoft's password input
-        // is rendered only after the email step is submitted. We retry with
-        // increasing patience because the transition can take 1-5s.
+        // is rendered only after the email step is submitted.
         emitLog(runId, 'info', 'Multi-step login: waiting for password field...')
-        await page
-          .waitForSelector(profile.passwordSelector, {
-            state: 'visible',
-            timeout: 20000,
-          })
-          .catch(() => {
-            // Some sites (e.g. personal Microsoft accounts) hide the password
-            // field behind a second click or a short redirect. Try a fallback
-            // by waiting a bit and retrying.
-          })
+        // Try the user's selector first, then fall back to common ones.
+        const passwordCandidates = [
+          profile.passwordSelector,
+          'input#passwordEntry',
+          'input#i0118',
+          "input[name='passwd']",
+          "input[type='password']",
+        ].filter((v, i, a) => a.indexOf(v) === i)
+        let passwordVisible = false
+        for (const sel of passwordCandidates) {
+          try {
+            await page.waitForSelector(sel, { state: 'visible', timeout: 8000 })
+            passwordVisible = true
+            break
+          } catch {
+            // try next
+          }
+        }
+        if (!passwordVisible) {
+          emitLog(runId, 'warn', 'Password field did not become visible — trying to fill anyway.')
+        }
 
         emitLog(runId, 'info', 'Multi-step login: filling password...')
-        await page.fill(profile.passwordSelector, profile.password, {
-          timeout: 15000,
-        })
+        await smartFill(page, profile.passwordSelector, profile.password, 'password')
         emitLog(runId, 'info', 'Multi-step login: clicking Sign in...')
-        await page.click(profile.submitSelector, { timeout: 15000 })
+        await smartClickSubmit(page, profile.submitSelector, 15000)
 
         // Handle the common "Stay signed in?" / "Remember me" prompt that
         // Microsoft and some other SSOs show AFTER the password step.
-        // We look for any visible submit button (often labeled "Yes"/"No")
-        // and click the first one we find. This is best-effort — if it's
-        // not present within 5s we just continue.
         await page.waitForTimeout(2000).catch(() => {})
-        const staySignedInBtn = await page
-          .$(profile.submitSelector)
-          .catch(() => null)
-        if (staySignedInBtn) {
-          const isVisible = await staySignedInBtn.isVisible().catch(() => false)
-          if (isVisible) {
-            emitLog(
-              runId,
-              'info',
-              'Multi-step login: handling "Stay signed in?" prompt...',
-            )
-            await staySignedInBtn.click().catch(() => {})
-          }
+        try {
+          await smartClickSubmit(page, profile.submitSelector, 5000)
+          emitLog(
+            runId,
+            'info',
+            'Multi-step login: handled "Stay signed in?" prompt.',
+          )
+        } catch {
+          // No prompt appeared — that's fine.
         }
       }
 
