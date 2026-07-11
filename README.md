@@ -11,6 +11,43 @@ post-login task list.
 
 ---
 
+## ⚡ Quick Start — نسخة سريعة
+
+```bash
+# 1. استنساخ
+git clone https://github.com/vcffgn36-ctrl/automation.git
+cd automation
+
+# 2. تثبيت الاعتماديات
+bun install
+
+# 3. إعداد البيئة + قاعدة البيانات
+cp .env.example .env
+mkdir -p db && bun run db:push
+
+# 4. تثبيت متصفح Firefox + اعتماديات الـ mini-service
+bunx playwright install firefox
+cd mini-services/automation-service && bun install && cd ../..
+
+# 5. شغّل خدمتين (في طرفيتين منفصلتين)
+#    الطرفية 1:
+cd mini-services/automation-service && bun run dev
+#    الطرفية 2:
+bun run dev
+
+# 6. افتح http://localhost:3000
+```
+
+**للتحديث لاحقاً (لما يصدر update على GitHub):**
+
+```bash
+./update.sh
+```
+
+> التفاصيل الكاملة في الأقسام أدناه.
+
+---
+
 ## المحتويات / Table of Contents
 
 - [نظرة عامة / Overview](#نظرة-عامة--overview)
@@ -419,38 +456,29 @@ cd mini-services/automation-service && bun run dev
 bun run dev
 ```
 
-### اختصار: سكريبت تحديث شامل
+### اختصار: سكريبت تحديث شامل (مرفق مع المشروع)
 
-أنشئ ملف `update.sh` في جذر المشروع:
-
-```bash
-#!/bin/bash
-set -e
-echo "→ Backing up database..."
-cp db/custom.db db/custom.db.backup 2>/dev/null || true
-
-echo "→ Pulling updates..."
-git pull origin main
-
-echo "→ Installing dependencies..."
-bun install
-cd mini-services/automation-service && bun install && cd ../..
-
-echo "→ Updating database schema..."
-bun run db:push
-
-echo "→ Updating Playwright Firefox..."
-bunx playwright install firefox 2>/dev/null || true
-
-echo "✓ Update complete! Restart both dev servers."
-```
-
-ثم:
+المشروع فيه ملف `update.sh` جاهز في جذر المستودع بيعمل كل الخطوات اللي فاتت تلقائياً:
 
 ```bash
-chmod +x update.sh
 ./update.sh
 ```
+
+> لو أول مرة تستخدمه عليه، أعطِه صلاحية التنفيذ:
+> ```bash
+> chmod +x update.sh
+> ```
+
+**ماذا يفعل السكريبت:**
+1. يأخذ نسخة احتياطية من قاعدة البيانات (بـ timestamp)
+2. يحفظ تعديلاتك المحلية (لو فيه) عبر `git stash`
+3. يسحب آخر تحديثات من `origin/main`
+4. يعيد تثبيت الاعتماديات (المشروع الرئيسي + الـ automation-service)
+5. يحدّث Prisma schema (بيحافظ على بياناتك)
+6. يحدّث متصفح Playwright Firefox
+7. يسترجع تعديلاتك المحلية
+
+بعد ما السكريبت يخلص، أعد تشغيل الخدمتين كما هو موضّح في الخطوة 6 فوق.
 
 ---
 
